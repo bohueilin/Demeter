@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="demeter_window_light">#FAF6EE</color>
+    <color name="demeter_window_dark">#15140F</color>
+    <color name="demeter_launcher_bg">#1C1B16</color>
+</resources>

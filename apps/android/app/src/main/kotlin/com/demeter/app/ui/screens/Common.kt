@@ -1,0 +1,167 @@
+package com.demeter.app.ui.screens
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Help
+import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.demeter.app.platform.TimeFormat
+import com.demeter.domain.model.EvidenceAxis
+import com.demeter.domain.model.UsageAxis
+import com.demeter.domain.model.UsageWindow
+import com.demeter.app.ui.theme.statusColors
+import kotlinx.coroutines.delay
+import java.time.Instant
+
+/** Shared 30-second clock so countdowns and freshness labels stay honest on screen. */
+@Composable
+fun nowTicker(): State<Instant> = produceState(initialValue = Instant.now()) {
+    while (true) {
+        delay(30_000)
+        value = Instant.now()
+    }
+}
+
+data class AxisBadge(val text: String, val color: Color, val icon: ImageVector)
+
+@Composable
+fun usageBadge(axis: UsageAxis, window: UsageWindow, now: Instant): AxisBadge {
+    val colors = statusColors()
+    return when (axis) {
+        UsageAxis.HEALTHY -> AxisBadge("Healthy", colors.healthy, Icons.Filled.Check)
+        UsageAxis.USE_SOON -> AxisBadge("Use soon", colors.useSoon, Icons.Filled.Schedule)
+        UsageAxis.URGENT -> AxisBadge(
+            "Use it — resets ${window.resetAt?.let { TimeFormat.untilPhrase(it, now) } ?: "soon"}",
+            colors.urgent,
+            Icons.Filled.PriorityHigh,
+        )
+        UsageAxis.EXHAUSTED -> AxisBadge("Exhausted", colors.exhausted, Icons.Filled.HourglassEmpty)
+        UsageAxis.RESET_PASSED -> AxisBadge("Reset likely happened", colors.useSoon, Icons.Filled.Refresh)
+        UsageAxis.UNKNOWN -> AxisBadge("Remaining not available", colors.unknown, Icons.Filled.Help)
+    }
+}
+
+@Composable
+fun evidenceBadge(axis: EvidenceAxis, window: UsageWindow, now: Instant): AxisBadge {
+    val colors = statusColors()
+    val updated = "Updated ${TimeFormat.agoPhrase(window.observedAt, now)}"
+    return when (axis) {
+        EvidenceAxis.CURRENT -> AxisBadge(updated, colors.healthy, Icons.Filled.Check)
+        EvidenceAxis.AGING -> AxisBadge(updated, colors.useSoon, Icons.Filled.Schedule)
+        EvidenceAxis.STALE -> AxisBadge("Stale · $updated", colors.staleEvidence, Icons.Filled.Error)
+    }
+}
+
+@Composable
+fun blockedBadge(): AxisBadge =
+    AxisBadge("Notifications off", statusColors().urgent, Icons.Filled.NotificationsOff)
+
+@Composable
+fun Badge(badge: AxisBadge, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .background(badge.color.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(badge.icon, contentDescription = null, tint = badge.color, modifier = Modifier.size(14.dp))
+        Text(badge.text, style = MaterialTheme.typography.labelMedium, color = badge.color)
+    }
+}
+
+/** The value a card leads with. Unknown limits lead with the reset countdown, never a fake %. */
+fun primaryMetric(window: UsageWindow, now: Instant): Pair<String, String> {
+    return when (val cap = window.capacity) {
+        is com.demeter.domain.model.CapacityState.Known ->
+            "${cap.remainingPercent}%" to "left"
+
+        is com.demeter.domain.model.CapacityState.Exhausted ->
+            "0%" to "left"
+
+        is com.demeter.domain.model.CapacityState.UnknownLimit ->
+            (window.resetAt?.let { TimeFormat.untilPhrase(it, now).removePrefix("in ") } ?: "—") to "until reset"
+    }
+}
+
+/**
+ * Circular capacity gauge. A known percentage fills the ring in its status color; an
+ * unknown limit draws only the track and leads with the reset countdown in the center —
+ * the ring never invents a fill for capacity we don't actually know.
+ */
+@Composable
+fun UsageRing(
+    percent: Int?,
+    color: Color,
+    centerTop: String,
+    centerBottom: String,
+    modifier: Modifier = Modifier,
+    diameter: Dp = 88.dp,
+    strokeWidth: Dp = 9.dp,
+) {
+    val track = MaterialTheme.colorScheme.surfaceVariant
+    Box(modifier.size(diameter), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val sw = strokeWidth.toPx()
+            val topLeft = Offset(sw / 2f, sw / 2f)
+            val arcSize = Size(size.width - sw, size.height - sw)
+            drawArc(
+                color = track, startAngle = -90f, sweepAngle = 360f, useCenter = false,
+                topLeft = topLeft, size = arcSize,
+                style = Stroke(width = sw, cap = StrokeCap.Round),
+            )
+            if (percent != null) {
+                drawArc(
+                    color = color, startAngle = -90f,
+                    sweepAngle = percent.coerceIn(0, 100) / 100f * 360f, useCenter = false,
+                    topLeft = topLeft, size = arcSize,
+                    style = Stroke(width = sw, cap = StrokeCap.Round),
+                )
+            }
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                centerTop,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                centerBottom,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
