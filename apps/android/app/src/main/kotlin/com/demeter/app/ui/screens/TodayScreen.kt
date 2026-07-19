@@ -24,7 +24,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Splitscreen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -45,20 +47,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.demeter.app.R
 import com.demeter.app.platform.TimeFormat
 import com.demeter.app.ui.DemeterViewModel
+import com.demeter.app.ui.theme.statusColors
+import com.demeter.domain.model.CapacityState
 import com.demeter.domain.model.DashboardPolicy
 import com.demeter.domain.model.MonitoredAccount
 import com.demeter.domain.model.Provider
 import com.demeter.domain.model.UsageWindow
 import com.demeter.domain.reminder.ReminderRule
 import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun TodayScreen(
@@ -67,6 +75,7 @@ fun TodayScreen(
     onOpenAccount: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onUpdateUsage: (accountId: String, windowId: String) -> Unit,
+    onOpenCompare: () -> Unit = {},
 ) {
     val accounts by viewModel.repo.accounts().collectAsStateWithLifecycle(initialValue = emptyList())
     val windows by viewModel.repo.latestWindows().collectAsStateWithLifecycle(initialValue = emptyList())
@@ -101,7 +110,13 @@ fun TodayScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Today", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            todayLine(now),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                         Text(
                             summaryLine(accounts, windows, now),
                             style = MaterialTheme.typography.bodySmall,
@@ -110,6 +125,9 @@ fun TodayScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onOpenCompare) {
+                        Icon(Icons.Filled.Splitscreen, contentDescription = "Compare accounts")
+                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = "Settings")
                     }
@@ -169,6 +187,46 @@ fun TodayScreen(
             }
         }
     }
+}
+
+/**
+ * Compact note for the windows the card is NOT leading with, e.g.
+ * "Fable only 92% left · Current session 8% left". Only windows with a real percentage
+ * appear — reset-only checkpoints would just add noise here.
+ */
+private fun secondaryLine(windows: List<UsageWindow>, primary: UsageWindow): String? {
+    val others = windows
+        .filter { it.id != primary.id }
+        .filter { it.capacity is CapacityState.Known || it.capacity is CapacityState.Exhausted }
+        .sortedWith(compareBy({ headlineRank(it.kind) }, { it.label }))
+        .take(2)
+    if (others.isEmpty()) return null
+    return others.joinToString(" · ") { w ->
+        val remaining = when (val cap = w.capacity) {
+            is CapacityState.Known -> "${cap.remainingPercent}% left"
+            else -> "used up"
+        }
+        "${w.label} $remaining"
+    }
+}
+
+/**
+ * e.g. "Today - Saturday, July 18th 2026". Derived from the shared ticker, so it rolls
+ * over on its own at midnight without needing a separate clock.
+ */
+private fun todayLine(now: Instant, zone: ZoneId = ZoneId.systemDefault()): String {
+    val date = now.atZone(zone).toLocalDate()
+    val dayOfWeek = date.format(DateTimeFormatter.ofPattern("EEEE"))
+    val month = date.format(DateTimeFormatter.ofPattern("MMMM"))
+    return "Today - $dayOfWeek, $month ${date.dayOfMonth}${ordinalSuffix(date.dayOfMonth)} ${date.year}"
+}
+
+private fun ordinalSuffix(day: Int): String = when {
+    day in 11..13 -> "th" // 11th, 12th, 13th are exceptions to the 1st/2nd/3rd rule
+    day % 10 == 1 -> "st"
+    day % 10 == 2 -> "nd"
+    day % 10 == 3 -> "rd"
+    else -> "th"
 }
 
 private fun summaryLine(accounts: List<MonitoredAccount>, windows: List<UsageWindow>, now: Instant): String {
@@ -247,30 +305,15 @@ private fun AccountCard(
     onUpdateUsage: (accountId: String, windowId: String) -> Unit,
     onDelete: () -> Unit,
 ) {
-    val primary = windows.maxByOrNull { DashboardPolicy.capacityAtRisk(it, now) }
-        ?: windows.firstOrNull()
+    // Lead with the weekly budget rather than the churning 5-hour session (see headlineWindow).
+    val primary = headlineWindow(windows)
+    val context = LocalContext.current
 
     Card(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // Provider logo so ChatGPT vs Claude accounts are recognizable at a glance.
-                val logoRes = when (account.provider) {
-                    Provider.OPENAI -> R.drawable.ic_provider_openai
-                    Provider.ANTHROPIC -> R.drawable.ic_provider_anthropic
-                }
-                Box(
-                    Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(Color.White),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Image(
-                        painter = painterResource(logoRes),
-                        contentDescription = account.provider.displayLabel,
-                        modifier = Modifier.size(30.dp),
-                    )
-                }
+                ProviderBadge(account.provider)
                 Spacer(Modifier.width(12.dp))
                 Text(
                     account.nickname,
@@ -278,6 +321,14 @@ private fun AccountCard(
                     maxLines = 2,
                     modifier = Modifier.weight(1f),
                 )
+                // Hands off to the provider's own app/browser — no embedded web view.
+                IconButton(onClick = { openProvider(context, account.provider) }) {
+                    Icon(
+                        Icons.Filled.OpenInNew,
+                        contentDescription = "Open ${account.provider.displayLabel}",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (primary != null) {
                     // Updating usage is the main repeat action; keep it reachable without opening details.
                     IconButton(onClick = { onUpdateUsage(account.id, primary.id) }) {
@@ -339,6 +390,14 @@ private fun AccountCard(
                 }
                 Spacer(Modifier.height(10.dp))
                 Badge(evidenceBadge(com.demeter.domain.model.FreshnessPolicy.evidenceAxis(primary.observedAt, primary.effectiveDuration, now), primary, now))
+                secondaryLine(windows, primary)?.let { note ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        note,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -357,7 +416,9 @@ private fun AccountCard(
                     Text(
                         if (hasRule) "· Reminders on" else "· Reminders off",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold,
+                        // Green when armed; red when off, as a nudge to set one up.
+                        color = if (hasRule) statusColors().healthy else MaterialTheme.colorScheme.error,
                     )
                 }
             }

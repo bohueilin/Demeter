@@ -1,6 +1,11 @@
 package com.demeter.app.ui.screens
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -27,19 +33,24 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.demeter.app.R
 import com.demeter.app.platform.TimeFormat
 import com.demeter.domain.model.EvidenceAxis
+import com.demeter.domain.model.Provider
 import com.demeter.domain.model.UsageAxis
 import com.demeter.domain.model.UsageWindow
+import com.demeter.domain.model.WindowKind
 import com.demeter.app.ui.theme.statusColors
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -163,5 +174,70 @@ fun UsageRing(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+// ---- Which window a card leads with ----
+
+/**
+ * Prefers the broad recurring budget (the weekly "all models" allowance) over the short
+ * 5-hour session. The session churns every few hours and is noisy at a glance; the weekly
+ * limit is the number people actually plan around. Everything else still shows as a note.
+ */
+fun headlineWindow(windows: List<UsageWindow>): UsageWindow? =
+    windows.minWithOrNull(
+        compareBy<UsageWindow> { headlineRank(it.kind) }
+            // Within a kind, the aggregate ("All models") outranks a model-specific limit.
+            .thenBy { if (it.label.contains("all", ignoreCase = true)) 0 else 1 }
+            .thenBy { it.label },
+    )
+
+fun headlineRank(kind: WindowKind): Int = when (kind) {
+    WindowKind.WEEKLY -> 0
+    WindowKind.MONTHLY -> 1
+    WindowKind.CREDITS -> 2
+    WindowKind.SESSION -> 3
+    WindowKind.CUSTOM -> 4
+}
+
+// ---- Provider identity & launch ----
+
+@DrawableRes
+fun providerLogoRes(provider: Provider): Int = when (provider) {
+    Provider.OPENAI -> R.drawable.ic_provider_openai
+    Provider.ANTHROPIC -> R.drawable.ic_provider_anthropic
+}
+
+private fun providerHomeUrl(provider: Provider): String = when (provider) {
+    Provider.OPENAI -> "https://chatgpt.com"
+    Provider.ANTHROPIC -> "https://claude.ai"
+}
+
+/**
+ * Hands the provider's URL to the system, which opens their official app if installed (or the
+ * browser otherwise). Demeter never loads it itself — that is why this needs no INTERNET
+ * permission and leaves the app's no-network guarantee intact.
+ */
+fun openProvider(context: Context, provider: Provider) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(providerHomeUrl(provider)))
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
+}
+
+/** Circular provider logo badge, on white so both marks read against any theme. */
+@Composable
+fun ProviderBadge(provider: Provider, modifier: Modifier = Modifier, diameter: Dp = 40.dp) {
+    Box(
+        modifier
+            .size(diameter)
+            .clip(CircleShape)
+            .background(Color.White),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painter = painterResource(providerLogoRes(provider)),
+            contentDescription = provider.displayLabel,
+            modifier = Modifier.size(diameter * 0.75f),
+        )
     }
 }

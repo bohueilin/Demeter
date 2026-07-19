@@ -8,6 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.demeter.app.ui.screens.AccountDetailScreen
 import com.demeter.app.ui.screens.AddAccountScreen
+import com.demeter.app.ui.screens.CompareScreen
 import com.demeter.app.ui.screens.ImportScreen
 import com.demeter.app.ui.screens.MultiImportScreen
 import com.demeter.app.ui.screens.OnboardingScreen
@@ -39,6 +40,15 @@ fun DemeterNavHost(navController: NavHostController, viewModel: DemeterViewModel
                 onUpdateUsage = { accountId, windowId ->
                     navController.navigate("window/$accountId?windowId=$windowId")
                 },
+                onOpenCompare = { navController.navigate("compare") },
+            )
+        }
+        composable("compare") {
+            CompareScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                onOpenAccount = { navController.navigate("account/$it") },
+                onAddAccount = { navController.navigate("addAccount") },
             )
         }
         composable("addAccount") {
