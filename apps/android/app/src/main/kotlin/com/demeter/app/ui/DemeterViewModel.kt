@@ -5,7 +5,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.demeter.app.DemeterApp
 import com.demeter.app.data.SampleData
+import com.demeter.app.platform.EmailComposer
 import com.demeter.app.platform.NotificationHelper
+import com.demeter.app.platform.TimeFormat
 import com.demeter.domain.model.CapacityState
 import com.demeter.domain.model.Provider
 import com.demeter.domain.model.SourceType
@@ -36,6 +38,51 @@ class DemeterViewModel(app: Application) : AndroidViewModel(app) {
     var onboarded: Boolean
         get() = prefs.getBoolean("onboarded", false)
         set(value) = prefs.edit().putBoolean("onboarded", value).apply()
+
+    /**
+     * Destination for the notification's "Email" action and the Settings summary. Stored locally
+     * only; Demeter never sends mail itself — it hands a pre-filled draft to the user's mail app.
+     */
+    var reminderEmail: String
+        get() = prefs.getString(EmailComposer.PREF_EMAIL, "").orEmpty()
+        set(value) = prefs.edit().putString(EmailComposer.PREF_EMAIL, value.trim()).apply()
+
+    /** Builds a plain-text summary of every account and window, for the mail composer. */
+    fun buildSummaryEmail(onReady: (subject: String, body: String) -> Unit) {
+        viewModelScope.launch {
+            val accountRows = container.db.accountDao().accounts().first()
+            val latest = repo.latestWindowsOnce()
+            val now = Instant.now()
+            val text = buildString {
+                appendLine("Demeter — usage summary")
+                appendLine(TimeFormat.resetLabel(now))
+                appendLine()
+                if (accountRows.isEmpty()) appendLine("No accounts yet.")
+                accountRows.forEach { a ->
+                    val providerLabel = runCatching { Provider.valueOf(a.provider).displayLabel }
+                        .getOrDefault(a.provider)
+                    appendLine("$providerLabel — ${a.nickname}")
+                    val mine = latest.filter { it.accountId == a.id }
+                    if (mine.isEmpty()) appendLine("  (no usage windows recorded)")
+                    mine.forEach { w ->
+                        val capacity = when (val c = w.capacity) {
+                            is CapacityState.Known -> "${c.remainingPercent}% left"
+                            is CapacityState.Exhausted -> "used up"
+                            is CapacityState.UnknownLimit -> "remaining not shown"
+                        }
+                        val reset = w.resetAt
+                            ?.let { "resets ${TimeFormat.resetLabel(it)} (${TimeFormat.untilPhrase(it, now)})" }
+                            ?: "no reset time recorded"
+                        appendLine("  • ${w.label}: $capacity — $reset")
+                        appendLine("      updated ${TimeFormat.agoPhrase(w.observedAt, now)}")
+                    }
+                    appendLine()
+                }
+                appendLine("Figures are your own recorded evidence, not provider-authoritative numbers.")
+            }
+            onReady("Demeter usage summary", text)
+        }
+    }
 
     /** Privacy mode: blocks screenshots and hides content in the app switcher (FLAG_SECURE). */
     val privacySecure = androidx.compose.runtime.mutableStateOf(prefs.getBoolean("privacy_secure", false))

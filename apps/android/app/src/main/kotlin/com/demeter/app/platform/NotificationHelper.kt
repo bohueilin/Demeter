@@ -122,7 +122,7 @@ object NotificationHelper {
             .setContentIntent(contentIntent)
             .setAutoCancel(true)
             .build()
-        val notification = NotificationCompat.Builder(context, CHANNEL_REMINDERS)
+        val builder = NotificationCompat.Builder(context, CHANNEL_REMINDERS)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body)
@@ -131,9 +131,28 @@ object NotificationHelper {
             .setAutoCancel(true)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(publicVersion)
-            .build()
+
+        // Optional "Email" action — hands this reminder to the user's mail app, pre-filled.
+        // Tapping a notification action is user interaction, so opening the composer is allowed;
+        // a background alarm could never do it on its own, and Demeter never sends mail itself.
+        val address = EmailComposer.addressOf(context)
+        if (EmailComposer.looksValid(address)) {
+            val mailIntent = EmailComposer.intentFor(
+                to = address,
+                subject = "Demeter: $title",
+                body = "$body\n\nSent from Demeter. Figures are your own recorded evidence, not provider-authoritative numbers.",
+            )
+            val mailPending = PendingIntent.getActivity(
+                context,
+                "$tag:mail".hashCode(),
+                mailIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            builder.addAction(R.drawable.ic_notification, "Email", mailPending)
+        }
+
         // Stable tag + id: a retry after a crash updates the same visible notification
         // instead of creating a duplicate.
-        NotificationManagerCompat.from(context).notify(tag, NOTIFICATION_ID, notification)
+        NotificationManagerCompat.from(context).notify(tag, NOTIFICATION_ID, builder.build())
     }
 }

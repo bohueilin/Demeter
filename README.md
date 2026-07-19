@@ -49,9 +49,11 @@ Demeter (the app) helps you harvest what you're already paying for:
 
 ## What it does
 
-- **🌾 One glanceable dashboard.** Every account shows a status-colored ring for remaining capacity,
-  the reset countdown, and orthogonal state at a glance — *healthy / use-soon / urgent* is separate
-  from *fresh / stale*, so a card can truthfully say "60% left" **and** "last updated 2 days ago."
+- **🌾 One glanceable dashboard.** Each account leads with its **weekly budget** — the number you
+  actually plan around — showing a status-colored ring, the full reset date and countdown, and a
+  compact note for the rest (`Fable only 92% left · Current session 8% left`). State is orthogonal:
+  *healthy / use-soon / urgent* is separate from *fresh / stale*, so a card can truthfully say
+  "60% left" **and** "last updated 2 days ago."
 - **📸 Import from a screenshot.** Snap your provider's usage screen and Demeter reads it with
   **on-device OCR** — parsing multi-window screens (Claude's session/weekly/model limits, ChatGPT's
   weekly limit + reset checkpoints) into separate, editable windows. You can also paste the text or
@@ -59,8 +61,28 @@ Demeter (the app) helps you harvest what you're already paying for:
 - **🔔 Truthful reminders.** Best-effort local reminders before each reset, with lead times from
   **7 days down to 1 hour**. A reminder based on stale data says so ("you had 60% left as of 2d
   ago") instead of pretending it's live. Nothing is ever a false alarm.
+- **⧉ Compare view.** A stacked two-pane dashboard — Claude on top, ChatGPT below — each with its
+  ring, reset and reminder state. Native panes, deliberately **not** embedded web views (see below).
+- **↗ One-tap hand-off.** Jump straight into the official ChatGPT or Claude app (or your browser)
+  from any card. Android opens it, so Demeter still needs no network permission.
+- **✉️ Email reminders (opt-in).** Reminder notifications can show an **Email** button that opens a
+  pre-filled draft in your mail app — handy for keeping an archived copy in your inbox and reading
+  it on desktop. Demeter never sends mail itself (see the caveat below).
 - **🗂️ Multiple accounts.** Track several ChatGPT and Claude accounts side by side, each with its
   own windows and reminder rules.
+
+---
+
+## Screens
+
+<p align="center">
+  <img src="docs/screenshots/today.png" alt="Today dashboard" width="270">
+  &nbsp;
+  <img src="docs/screenshots/compare.png" alt="Compare view" width="270">
+  &nbsp;
+  <img src="docs/screenshots/email.png" alt="Email reminder settings" width="270">
+</p>
+<p align="center"><i>Today · Compare (Claude over ChatGPT) · Email reminder settings — shown with sample data.</i></p>
 
 ---
 
@@ -79,6 +101,13 @@ Demeter's privacy isn't a toggle you trust — it's enforced by what the app **s
   redacts the app in the recents switcher).
 - **Your data, your call.** Everything lives in a local database you can **export** (JSON) or
   **delete** (one tap wipes every account, window, and reminder, and cancels all alarms).
+- **Email is a hand-off, not a send.** The optional email reminder builds a `mailto:` draft and lets
+  *your* mail app do the sending. Demeter opens no sockets and holds no mail credentials. The honest
+  trade-off: **you tap Send** — it can never fire unattended. Truly automatic email would need a
+  server or Gmail API access, i.e. network + credentials, which is exactly what this app refuses.
+- **Compare is native, not a browser.** Showing both providers side by side could have been two
+  embedded web views. That would have required `INTERNET`, an in-app provider login, and would sit
+  against both providers' terms — so the panes are rendered from your own local data instead.
 
 The only two permissions the app requests: `POST_NOTIFICATIONS` (asked contextually, only when you
 enable a reminder) and `RECEIVE_BOOT_COMPLETED` (to reschedule reminders after a reboot).
