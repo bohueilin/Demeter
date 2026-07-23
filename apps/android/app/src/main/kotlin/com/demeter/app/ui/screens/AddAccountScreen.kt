@@ -92,7 +92,7 @@ fun AddAccountScreen(
             }
             Spacer(Modifier.height(10.dp))
             Text(
-                "Identified by name only — Demeter never signs in to your ${provider.accountNoun} or asks for a password. Independent app, not affiliated with OpenAI or Anthropic.",
+                "Identified by name only — Demeter never signs in to your ${provider.accountNoun} or asks for a password. Independent app, not affiliated with OpenAI, Anthropic, or Google.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -143,7 +143,7 @@ private fun ProviderCard(
     val accent = providerAccent(provider)
     Card(
         onClick = onClick,
-        modifier = modifier.height(156.dp),
+        modifier = modifier.height(150.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (selected) accent.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant,
         ),
@@ -152,37 +152,35 @@ private fun ProviderCard(
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(horizontal = 8.dp, vertical = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            val logoRes = when (provider) {
-                Provider.OPENAI -> R.drawable.ic_provider_openai
-                Provider.ANTHROPIC -> R.drawable.ic_provider_anthropic
-            }
             Box(
                 Modifier
-                    .size(64.dp)
+                    .size(56.dp)
                     .clip(CircleShape)
                     .background(Color.White),
                 contentAlignment = Alignment.Center,
             ) {
                 Image(
-                    painter = painterResource(logoRes),
+                    painter = painterResource(providerLogoRes(provider)),
                     contentDescription = null,
-                    modifier = Modifier.size(46.dp),
+                    modifier = Modifier.size(40.dp),
                 )
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
             Text(
                 provider.displayLabel,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
             )
             Text(
                 provider.accountNoun,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
         }
     }
@@ -191,4 +189,5 @@ private fun ProviderCard(
 private fun providerAccent(p: Provider): Color = when (p) {
     Provider.OPENAI -> Color(0xFF10877A)
     Provider.ANTHROPIC -> Color(0xFFCC7A52)
+    Provider.GOOGLE -> Color(0xFF4285F4)
 }

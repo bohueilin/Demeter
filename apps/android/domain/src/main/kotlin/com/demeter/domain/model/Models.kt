@@ -7,6 +7,7 @@ import java.time.Instant
 enum class Provider(val displayLabel: String, val accountNoun: String) {
     OPENAI("ChatGPT", "OpenAI account"),
     ANTHROPIC("Claude", "Anthropic account"),
+    GOOGLE("Gemini", "Google account"),
 }
 
 /** Source is a stable fact about where evidence came from — it is not a freshness state. */

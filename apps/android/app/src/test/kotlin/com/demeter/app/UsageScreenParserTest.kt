@@ -86,6 +86,41 @@ class UsageScreenParserTest {
         line("Expires 8/12", 150, 1628),
     )
 
+    // Gemini "Usage limits" screen: "Current usage 11% used / Resets at 11:24 PM" and
+    // "Weekly limit 9% used / Resets July 26 at 5:24 PM". Note the singular "Weekly limit" label.
+    private val gemini = listOf(
+        line("10:03", 150, 65),
+        line("Usage limits", 200, 300),      // header (ends in "limits") — dropped
+        line("PRO", 430, 300),
+        line("Updated just now", 180, 520),
+        line("Current usage", 200, 620),
+        line("11% used", 780, 620),
+        line("Resets at 11:24 PM", 190, 700),
+        line("Weekly limit", 150, 810),
+        line("9% used", 780, 825),
+        line("Resets July 26 at 5:24 PM", 215, 875),
+        line("Get 5x more usage with AI Ultra", 280, 990),
+        line("$99.99/month", 145, 1035),
+    )
+
+    @Test
+    fun parsesGeminiUsageScreen() {
+        val windows = UsageScreenParser.parse(gemini, now, zone)
+        assertEquals(2, windows.size)
+
+        val current = windows.first { it.label.contains("current", ignoreCase = true) }
+        assertEquals(WindowKind.SESSION, current.kind)
+        assertEquals(11, current.usedPercent)
+        assertEquals(89, current.remainingPercent)
+        assertNotNull(current.resetAt) // "at 11:24 PM" today
+
+        val weekly = windows.first { it.label.contains("weekly", ignoreCase = true) }
+        assertEquals(WindowKind.WEEKLY, weekly.kind)
+        assertEquals(9, weekly.usedPercent)
+        assertEquals(91, weekly.remainingPercent)
+        assertEquals(Instant.parse("2026-07-26T17:24:00Z"), weekly.resetAt) // "July 26 at 5:24 PM"
+    }
+
     @Test
     fun ignoresStrayPercentageWithNoRealLabel() {
         // Browser chrome noise: a ":D" tab icon misread as "D)" and a stray "2%" nearby.

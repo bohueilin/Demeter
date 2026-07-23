@@ -7,9 +7,10 @@
 <p align="center"><strong>Know what remains. Use it before it resets.</strong></p>
 
 <p align="center">
-  A local-first Android app that tracks your <b>ChatGPT</b> and <b>Claude</b> subscription usage
-  allowances — showing what capacity is left, when it resets, and reminding you before it slips
-  away. Every number comes from evidence <b>you</b> provide, and nothing ever leaves your device.
+  A local-first Android app that tracks your <b>ChatGPT</b>, <b>Claude</b>, and <b>Gemini</b>
+  subscription usage allowances — showing what capacity is left, when it resets, and reminding you
+  before it slips away. Every number comes from evidence <b>you</b> provide, and nothing ever
+  leaves your device.
 </p>
 
 <p align="center">
@@ -56,8 +57,8 @@ Demeter (the app) helps you harvest what you're already paying for:
   "60% left" **and** "last updated 2 days ago."
 - **📸 Import from a screenshot.** Snap your provider's usage screen and Demeter reads it with
   **on-device OCR** — parsing multi-window screens (Claude's session/weekly/model limits, ChatGPT's
-  weekly limit + reset checkpoints) into separate, editable windows. You can also paste the text or
-  enter values by hand.
+  weekly limit + reset checkpoints, Gemini's current-usage + weekly limit) into separate, editable
+  windows. You can also paste the text or enter values by hand.
 - **🔔 Truthful reminders.** Best-effort local reminders before each reset, with lead times from
   **7 days down to 1 hour**. A reminder based on stale data says so ("you had 60% left as of 2d
   ago") instead of pretending it's live. Nothing is ever a false alarm.
@@ -68,8 +69,8 @@ Demeter (the app) helps you harvest what you're already paying for:
 - **✉️ Email reminders (opt-in).** Reminder notifications can show an **Email** button that opens a
   pre-filled draft in your mail app — handy for keeping an archived copy in your inbox and reading
   it on desktop. Demeter never sends mail itself (see the caveat below).
-- **🗂️ Multiple accounts.** Track several ChatGPT and Claude accounts side by side, each with its
-  own windows and reminder rules.
+- **🗂️ Multiple providers & accounts.** Track ChatGPT, Claude, and Gemini accounts side by side,
+  each with its own windows and reminder rules.
 
 ---
 

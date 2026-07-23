@@ -67,6 +67,11 @@ object SampleData {
         val claudeMax = account(Provider.ANTHROPIC, "Claude Max (sample)")
         evidence(claudeMax, "Weekly · Opus", WindowKind.WEEKLY, "UNKNOWN", null, Duration.ofDays(1).plusHours(6), Duration.ofHours(1), SourceType.MANUAL)
 
+        // 5 — Gemini: daily "current usage" + weekly limit, both mostly available
+        val geminiPersonal = account(Provider.GOOGLE, "Gemini (sample)")
+        evidence(geminiPersonal, "Current usage", WindowKind.SESSION, "KNOWN", 89, Duration.ofHours(5), Duration.ofMinutes(3), SourceType.SCREENSHOT)
+        evidence(geminiPersonal, "Weekly limit", WindowKind.WEEKLY, "KNOWN", 91, Duration.ofDays(6), Duration.ofMinutes(3), SourceType.SCREENSHOT)
+
         db.reminderDao().insertEvent(
             ReminderEventEntity(
                 atEpochSec = now.epochSecond,

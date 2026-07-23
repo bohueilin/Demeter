@@ -27,9 +27,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -66,10 +65,12 @@ fun CompareScreen(
     val rules by viewModel.repo.rules().collectAsStateWithLifecycle(initialValue = emptyList())
     val now by nowTicker()
 
-    val claude = accounts.filter { it.provider == Provider.ANTHROPIC }
-    val openai = accounts.filter { it.provider == Provider.OPENAI }
-    var claudeIndex by remember { mutableStateOf(0) }
-    var openaiIndex by remember { mutableStateOf(0) }
+    // One pane per provider the user actually has accounts for — so Gemini appears once added,
+    // and the view never shows an empty pane for a provider they don't use. Ordered Claude,
+    // ChatGPT, Gemini. Falls back to all providers when there are no accounts yet.
+    val providers = Provider.entries.filter { p -> accounts.any { it.provider == p } }
+        .ifEmpty { Provider.entries.toList() }
+    val selected = remember { mutableStateMapOf<Provider, Int>() }
 
     Scaffold(
         topBar = {
@@ -90,30 +91,21 @@ fun CompareScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            ComparePane(
-                provider = Provider.ANTHROPIC,
-                accounts = claude,
-                selectedIndex = claudeIndex.coerceAtMost((claude.size - 1).coerceAtLeast(0)),
-                onSelect = { claudeIndex = it },
-                windows = windows,
-                rules = rules,
-                now = now,
-                onOpenAccount = onOpenAccount,
-                onAddAccount = onAddAccount,
-                modifier = Modifier.weight(1f),
-            )
-            ComparePane(
-                provider = Provider.OPENAI,
-                accounts = openai,
-                selectedIndex = openaiIndex.coerceAtMost((openai.size - 1).coerceAtLeast(0)),
-                onSelect = { openaiIndex = it },
-                windows = windows,
-                rules = rules,
-                now = now,
-                onOpenAccount = onOpenAccount,
-                onAddAccount = onAddAccount,
-                modifier = Modifier.weight(1f),
-            )
+            providers.forEach { p ->
+                val provAccounts = accounts.filter { it.provider == p }
+                ComparePane(
+                    provider = p,
+                    accounts = provAccounts,
+                    selectedIndex = (selected[p] ?: 0).coerceAtMost((provAccounts.size - 1).coerceAtLeast(0)),
+                    onSelect = { selected[p] = it },
+                    windows = windows,
+                    rules = rules,
+                    now = now,
+                    onOpenAccount = onOpenAccount,
+                    onAddAccount = onAddAccount,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }

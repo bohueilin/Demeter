@@ -206,11 +206,13 @@ fun headlineRank(kind: WindowKind): Int = when (kind) {
 fun providerLogoRes(provider: Provider): Int = when (provider) {
     Provider.OPENAI -> R.drawable.ic_provider_openai
     Provider.ANTHROPIC -> R.drawable.ic_provider_anthropic
+    Provider.GOOGLE -> R.drawable.ic_provider_google
 }
 
 private fun providerHomeUrl(provider: Provider): String = when (provider) {
     Provider.OPENAI -> "https://chatgpt.com"
     Provider.ANTHROPIC -> "https://claude.ai"
+    Provider.GOOGLE -> "https://gemini.google.com/app"
 }
 
 /**

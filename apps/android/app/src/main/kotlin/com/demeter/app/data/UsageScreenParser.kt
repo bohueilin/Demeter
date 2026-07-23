@@ -68,8 +68,9 @@ object UsageScreenParser {
             val t = l.text.trim()
             STATUS_BAR.containsMatchIn(t) ||
                 t.equals("Usage", ignoreCase = true) ||
+                // Only the plural "Weekly limits" is a Claude/section header. Singular
+                // "Weekly limit" is Gemini's actual row label, so it must NOT be dropped.
                 t.equals("Weekly limits", ignoreCase = true) ||
-                t.equals("Weekly limit", ignoreCase = true) ||
                 isChrome(t) ||
                 t.isBlank()
         }
@@ -258,6 +259,8 @@ object UsageScreenParser {
 
     private fun kindFor(label: String): WindowKind = when {
         label.contains("session", ignoreCase = true) -> WindowKind.SESSION
+        // Gemini's "Current usage" is the short rolling window that resets daily.
+        label.contains("current", ignoreCase = true) -> WindowKind.SESSION
         label.contains("week", ignoreCase = true) -> WindowKind.WEEKLY
         label.contains("month", ignoreCase = true) -> WindowKind.MONTHLY
         label.contains("credit", ignoreCase = true) -> WindowKind.CREDITS
