@@ -38,6 +38,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.demeter.app.R
@@ -75,7 +80,7 @@ fun AddAccountScreen(
                 .padding(padding)
                 .padding(20.dp),
         ) {
-            Text("Choose a provider", style = MaterialTheme.typography.titleMedium)
+            Text("Choose a provider", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(12.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -129,9 +134,10 @@ fun AddAccountScreen(
 }
 
 /**
- * Large provider tile. Uses an original, generic mark (not the provider's trademarked logo)
- * plus its name — Demeter is an independent app and deliberately does not reproduce OpenAI's
- * or Anthropic's brand assets.
+ * Large provider tile. Shows the provider's mark solely to identify which service the
+ * account belongs to (nominative use) — Demeter is independent and unaffiliated, and the
+ * disclaimer below the tiles says so. Selection is exposed both visually (accent border,
+ * >= 3:1 against the tint) and semantically (radio-button role for TalkBack).
  */
 @Composable
 private fun ProviderCard(
@@ -143,7 +149,12 @@ private fun ProviderCard(
     val accent = providerAccent(provider)
     Card(
         onClick = onClick,
-        modifier = modifier.height(150.dp),
+        modifier = modifier
+            .height(150.dp)
+            .semantics {
+                this.selected = selected
+                this.role = Role.RadioButton
+            },
         colors = CardDefaults.cardColors(
             containerColor = if (selected) accent.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant,
         ),
@@ -186,8 +197,10 @@ private fun ProviderCard(
     }
 }
 
+// Selected-state borders: each measures >= 3:1 against its own 12%-tint container in
+// both themes (Anthropic 4.07:1, Google 4.26:1, OpenAI 3.53:1 light).
 private fun providerAccent(p: Provider): Color = when (p) {
     Provider.OPENAI -> Color(0xFF10877A)
-    Provider.ANTHROPIC -> Color(0xFFCC7A52)
-    Provider.GOOGLE -> Color(0xFF4285F4)
+    Provider.ANTHROPIC -> Color(0xFFAD5528)
+    Provider.GOOGLE -> Color(0xFF1A63DC)
 }

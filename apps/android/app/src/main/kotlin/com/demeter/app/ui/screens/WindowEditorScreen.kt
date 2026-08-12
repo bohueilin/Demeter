@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -40,7 +41,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.demeter.app.data.PasteParser
@@ -50,6 +57,8 @@ import com.demeter.app.ui.ScreenshotResult
 import com.demeter.domain.model.CapacityState
 import com.demeter.domain.model.SourceType
 import com.demeter.domain.model.WindowKind
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -77,6 +86,7 @@ fun WindowEditorScreen(
     onDone: (String) -> Unit,
     onBack: () -> Unit,
     onOpenMultiImport: () -> Unit = {},
+    consumePendingImport: Boolean = false,
 ) {
     var label by remember { mutableStateOf("") }
     var kind by remember { mutableStateOf(WindowKind.SESSION) }
@@ -91,6 +101,7 @@ fun WindowEditorScreen(
     var loadedExisting by remember { mutableStateOf(false) }
     var labelEdited by remember { mutableStateOf(false) }
     var importStatus by remember { mutableStateOf<String?>(null) }
+    var reading by remember { mutableStateOf(false) }
 
     val resetChoices = remember {
         listOf(
@@ -157,13 +168,31 @@ fun WindowEditorScreen(
         if (result.recognized.isNotEmpty()) source = src
     }
 
+    // Consume the share-sheet OCR hand-off exactly once, and only when this editor was
+    // reached from the Import screen's zero-account path (nav flag) — a plain
+    // "Update usage" visit never reads it, so an abandoned import cannot leak into an
+    // unrelated editor. snapshotFlow waits for OCR to finish (pendingImport stays null
+    // until then), then the staging is cleared.
+    if (consumePendingImport) {
+        LaunchedEffect(Unit) {
+            val carried = snapshotFlow { viewModel.pendingImport.value }.filterNotNull().first()
+            viewModel.clearPendingImport()
+            if (carried.isNotBlank()) {
+                pasteText = carried
+                applyParsed(carried, SourceType.SCREENSHOT)
+            }
+        }
+    }
+
     // Photo Picker: no storage permission, and OCR runs on-device (see OcrReader).
     val pickScreenshot = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
         if (uri != null) {
             importStatus = null
+            reading = true
             viewModel.readScreenshot(uri) { result ->
+                reading = false
                 when (result) {
                     is ScreenshotResult.Multi -> {
                         viewModel.stagePendingWindows(accountId, result.windows)
@@ -202,7 +231,11 @@ fun WindowEditorScreen(
             // Paste assist — assistive autofill, never force-matched, always editable.
             Card {
                 Column(Modifier.padding(12.dp)) {
-                    Text("Paste text or import a screenshot (optional)", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Paste text or import a screenshot (optional)",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.semantics { heading() },
+                    )
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = pasteText,
@@ -233,33 +266,45 @@ fun WindowEditorScreen(
                                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                                 )
                             },
+                            // Disabled while OCR runs: a second tap must not race the first.
+                            enabled = !reading,
                         ) {
-                            Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Import screenshot")
+                            if (reading) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Reading…")
+                            } else {
+                                Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Import screenshot")
+                            }
                         }
                     }
-                    if (recognized.isNotEmpty()) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "Recognized: ${recognized.joinToString(" · ")}. Everything below stays editable.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    importStatus?.let { status ->
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            status,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
+                    // Always-composed live region: TalkBack only announces a live region when
+                    // a property changes on an EXISTING node, so the status line stays in the
+                    // tree and swaps its text. Reserving the line also means no layout shift
+                    // when a result lands.
+                    Spacer(Modifier.height(6.dp))
+                    val parseStatus = importStatus
+                        ?: recognized.takeIf { it.isNotEmpty() }?.let {
+                            "Recognized: ${it.joinToString(" · ")}. Everything below stays editable."
+                        }
+                        ?: ""
+                    Text(
+                        parseStatus,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (importStatus != null) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
                 }
             }
 
             Spacer(Modifier.height(20.dp))
-            Text("Window", style = MaterialTheme.typography.titleSmall)
+            Text("Window", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 WindowKind.entries.forEach { k ->
@@ -283,7 +328,7 @@ fun WindowEditorScreen(
             )
 
             Spacer(Modifier.height(20.dp))
-            Text("Remaining capacity", style = MaterialTheme.typography.titleSmall)
+            Text("Remaining capacity", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CapacityChoice.entries.forEach { c ->
@@ -302,7 +347,12 @@ fun WindowEditorScreen(
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
-                    Slider(value = remaining, onValueChange = { remaining = it }, valueRange = 0f..100f)
+                    Slider(
+                        value = remaining,
+                        onValueChange = { remaining = it },
+                        valueRange = 0f..100f,
+                        modifier = Modifier.semantics { contentDescription = "Remaining capacity" },
+                    )
                 }
                 CapacityChoice.UNKNOWN -> {
                     Spacer(Modifier.height(8.dp))
@@ -323,7 +373,7 @@ fun WindowEditorScreen(
             }
 
             Spacer(Modifier.height(20.dp))
-            Text("Resets", style = MaterialTheme.typography.titleSmall)
+            Text("Resets", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 resetChoices.forEachIndexed { idx, c ->

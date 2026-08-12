@@ -70,9 +70,13 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(shared) {
                     if (shared != null) {
                         sharedImage.value = null
-                        viewModel.ingestSharedImage(shared) {
-                            runCatching { navController.navigate("import") }
-                        }
+                        // Navigate first so the share gets immediate feedback; the Import
+                        // screen shows "Reading screenshot on-device…" until OCR finishes.
+                        // Clear any previously staged text so this share never seeds stale,
+                        // and reuse an existing Import entry instead of stacking a second.
+                        viewModel.clearPendingImport()
+                        runCatching { navController.navigate("import") { launchSingleTop = true } }
+                        viewModel.ingestSharedImage(shared) {}
                     }
                 }
             }

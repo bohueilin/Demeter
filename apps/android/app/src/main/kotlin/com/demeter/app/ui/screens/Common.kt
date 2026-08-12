@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -108,7 +109,9 @@ fun Badge(badge: AxisBadge, modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Icon(badge.icon, contentDescription = null, tint = badge.color, modifier = Modifier.size(14.dp))
-        Text(badge.text, style = MaterialTheme.typography.labelMedium, color = badge.color)
+        // Status hue lives in the icon + pill; the words stay onSurface so the product's
+        // truth claims ("Updated 25m ago", "Stale") read at >= 7.8:1 instead of 2.3-3.7:1.
+        Text(badge.text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -141,8 +144,20 @@ fun UsageRing(
     diameter: Dp = 88.dp,
     strokeWidth: Dp = 9.dp,
 ) {
-    val track = MaterialTheme.colorScheme.surfaceVariant
-    Box(modifier.size(diameter), contentAlignment = Alignment.Center) {
+    // Unknown-limit rings are ONLY a track, so it must read against the card
+    // (outline: 3.06:1 light / 3.44:1 dark). Known-percentage rings keep the quiet
+    // surfaceVariant track instead — there the legibility that matters is the
+    // fill-vs-track boundary (3.3–7.3:1), which an outline track would collapse
+    // to ~1:1 against the healthy fill.
+    val track = if (percent == null) {
+        MaterialTheme.colorScheme.outline
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    // The box grows with the user's font scale so the sp-sized center text never
+    // collides with the ring stroke at accessibility text sizes.
+    val ringScale = LocalDensity.current.fontScale
+    Box(modifier.size(diameter * ringScale), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val sw = strokeWidth.toPx()
             val topLeft = Offset(sw / 2f, sw / 2f)
@@ -164,9 +179,19 @@ fun UsageRing(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 centerTop,
-                style = MaterialTheme.typography.titleMedium,
+                // Percentages ("81%") get the big size step; longer countdowns
+                // ("23h 59m") stay at titleMedium so they never paint over the
+                // ring stroke or wrap inside it.
+                style = if (centerTop.length <= 5) {
+                    MaterialTheme.typography.titleLarge
+                } else {
+                    MaterialTheme.typography.titleMedium
+                },
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
+                // Short values stay on one line; longer phrases ("already passed")
+                // may stack on two rather than clip mid-word.
+                maxLines = if (centerTop.length <= 5) 1 else 2,
             )
             Text(
                 centerBottom,

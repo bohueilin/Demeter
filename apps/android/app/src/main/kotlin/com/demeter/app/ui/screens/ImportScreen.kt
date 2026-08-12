@@ -6,16 +6,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,7 +33,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.demeter.app.data.PasteParser
@@ -53,9 +59,24 @@ fun ImportScreen(
     onBack: () -> Unit,
 ) {
     val accounts by viewModel.repo.accounts().collectAsStateWithLifecycle(initialValue = emptyList())
-    var text by remember { mutableStateOf(viewModel.pendingImport.value.orEmpty()) }
+    // The share path navigates here immediately and OCR finishes afterwards:
+    // pendingImport == null means "still reading", "" means "read but found nothing".
+    val pending = viewModel.pendingImport.value
+    var seeded by remember { mutableStateOf(pending != null) }
+    var text by remember { mutableStateOf(pending.orEmpty()) }
     var selected by remember { mutableStateOf<String?>(null) }
     val parsed = remember(text) { PasteParser.parse(text) }
+
+    LaunchedEffect(pending) {
+        if (pending == null) {
+            // A new share is being read (or the staging was cleared) — back to loading,
+            // so a reused Import entry never keeps showing the previous screenshot's text.
+            seeded = false
+        } else if (!seeded) {
+            text = pending
+            seeded = true
+        }
+    }
 
     LaunchedEffect(accounts) {
         if (selected == null) selected = accounts.firstOrNull()?.id
@@ -81,17 +102,34 @@ fun ImportScreen(
         ) {
             Card {
                 Column(Modifier.padding(12.dp)) {
-                    Text("Read on-device from your screenshot", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(6.dp))
                     Text(
-                        if (parsed.recognized.isNotEmpty()) {
-                            "Recognized: ${parsed.recognized.joinToString(" · ")}. You can edit before saving."
-                        } else {
-                            "Couldn't read usage details automatically. Edit the text below, or fill it in on the next screen."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        "Read on-device from your screenshot",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.semantics { heading() },
                     )
+                    Spacer(Modifier.height(6.dp))
+                    if (!seeded) {
+                        // OCR is still running — say so instead of showing an empty result.
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.padding(4.dp))
+                            Text(
+                                "Reading screenshot on-device…",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    } else {
+                        Text(
+                            if (parsed.recognized.isNotEmpty()) {
+                                "Recognized: ${parsed.recognized.joinToString(" · ")}. You can edit before saving."
+                            } else {
+                                "Couldn't read usage details automatically. Edit the text below, or fill it in on the next screen."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = text,
@@ -99,6 +137,7 @@ fun ImportScreen(
                         label = { Text("Recognized text") },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 3,
+                        enabled = seeded,
                     )
                 }
             }
@@ -115,7 +154,7 @@ fun ImportScreen(
                     Text("Add an account")
                 }
             } else {
-                Text("Attach to account", style = MaterialTheme.typography.titleSmall)
+                Text("Attach to account", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
                 Spacer(Modifier.height(8.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     accounts.forEach { a ->
@@ -154,7 +193,7 @@ fun ImportScreen(
                             onSaved(accId)
                         }
                     },
-                    enabled = selected != null,
+                    enabled = selected != null && seeded,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("Save to account")

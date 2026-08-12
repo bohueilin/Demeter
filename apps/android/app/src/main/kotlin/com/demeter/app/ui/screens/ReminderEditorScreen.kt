@@ -11,11 +11,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -42,6 +45,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.demeter.app.platform.NotificationHelper
@@ -158,7 +164,7 @@ fun ReminderEditorScreen(
                 .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState()),
         ) {
-            Text("Remind me before the reset", style = MaterialTheme.typography.titleSmall)
+            Text("Remind me before the reset", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 LEAD_TIME_CHOICES_MINUTES.forEach { lead ->
@@ -177,16 +183,23 @@ fun ReminderEditorScreen(
             )
 
             Spacer(Modifier.height(20.dp))
-            Text("Evidence policy", style = MaterialTheme.typography.titleSmall)
+            Text("Evidence policy", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(4.dp))
             EvidencePolicy.entries.forEach { policy ->
+                // The whole row is the radio and carries its label, so TalkBack reads
+                // the policy name with the selection state instead of a bare "radio button".
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .selectable(
+                            selected = evidencePolicy == policy,
+                            role = Role.RadioButton,
+                            onClick = { evidencePolicy = policy },
+                        )
                         .padding(vertical = 4.dp),
                 ) {
-                    RadioButton(selected = evidencePolicy == policy, onClick = { evidencePolicy = policy })
+                    RadioButton(selected = evidencePolicy == policy, onClick = null)
                     Column {
                         Text(policy.displayLabel, style = MaterialTheme.typography.bodyMedium)
                         Text(
@@ -199,7 +212,16 @@ fun ReminderEditorScreen(
             }
 
             Spacer(Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = remindWhenUnknown,
+                        role = Role.Switch,
+                        onValueChange = { remindWhenUnknown = it },
+                    ),
+            ) {
                 Column(Modifier.weight(1f)) {
                     Text("Remind me even when remaining usage is unknown", style = MaterialTheme.typography.bodyMedium)
                     Text(
@@ -208,7 +230,7 @@ fun ReminderEditorScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(checked = remindWhenUnknown, onCheckedChange = { remindWhenUnknown = it })
+                Switch(checked = remindWhenUnknown, onCheckedChange = null)
             }
 
             Spacer(Modifier.height(16.dp))
@@ -225,7 +247,16 @@ fun ReminderEditorScreen(
             }
 
             Spacer(Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = quietHours,
+                        role = Role.Switch,
+                        onValueChange = { quietHours = it },
+                    ),
+            ) {
                 Column(Modifier.weight(1f)) {
                     Text("Quiet hours 22:00 – 07:00", style = MaterialTheme.typography.bodyMedium)
                     Text(
@@ -234,7 +265,7 @@ fun ReminderEditorScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(checked = quietHours, onCheckedChange = { quietHours = it })
+                Switch(checked = quietHours, onCheckedChange = null)
             }
 
             Spacer(Modifier.height(20.dp))
@@ -277,9 +308,21 @@ fun ReminderEditorScreen(
             }
 
             Spacer(Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = enabled,
+                        role = Role.Switch,
+                        onValueChange = { enabled = it },
+                    )
+                    // Single-line row: keep the 48dp touch-target minimum the bare
+                    // Switch no longer provides once its own click handling is null.
+                    .defaultMinSize(minHeight = 48.dp),
+            ) {
                 Text("Reminders on", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                Switch(checked = enabled, onCheckedChange = { enabled = it })
+                Switch(checked = enabled, onCheckedChange = null)
             }
 
             if (savedBlocked) {

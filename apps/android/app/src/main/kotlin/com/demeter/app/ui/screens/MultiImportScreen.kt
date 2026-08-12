@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -31,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.demeter.app.data.UsageScreenParser.ParsedWindow
@@ -86,15 +88,23 @@ fun MultiImportScreen(
 
             windows.forEachIndexed { i, w ->
                 Card(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                    // The row is the checkbox and carries the window's label, so TalkBack
+                    // announces which window is being included or excluded.
                     Row(
-                        Modifier.padding(12.dp),
+                        Modifier
+                            .toggleable(
+                                value = checked.getOrElse(i) { false },
+                                role = Role.Checkbox,
+                                onValueChange = { on ->
+                                    checked = checked.toMutableList().also { it[i] = on }
+                                },
+                            )
+                            .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(
                             checked = checked.getOrElse(i) { false },
-                            onCheckedChange = { on ->
-                                checked = checked.toMutableList().also { it[i] = on }
-                            },
+                            onCheckedChange = null,
                         )
                         Spacer(Modifier.width(4.dp))
                         Column(Modifier.weight(1f)) {

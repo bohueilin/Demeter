@@ -289,4 +289,12 @@ Follow-up from live user testing on a real phone (a Claude "Usage" screenshot).
 
 **Provider picker:** replaced chips with two large tiles (ChatGPT/OpenAI, Claude/Anthropic) using original generic icons + accent colors — deliberately NOT the providers' trademarked logos (Play/affiliation risk). Verified on-device.
 
+> **[Correction 2026-08-11]** The generic-icon statement above no longer describes the shipped
+> UI: since the provider hand-off work (v1.5.1), `res/drawable-nodpi/ic_provider_*.png` are the
+> providers' actual marks, shown solely to identify which service an account belongs to
+> (nominative use), with the non-affiliation disclaimer in-app and in the README. The
+> `ProviderCard` KDoc has been updated to match. **Action carried forward:** re-run the
+> Play-listing trademark/affiliation risk assessment this section originally named before any
+> public release, or restore generic marks.
+
 **Note:** `MultiImportScreen` UI verified by build + unit test only; the shared emulator was taken over by a concurrent session mid-test, so the multi-window flow was not re-driven on-device by the assistant.

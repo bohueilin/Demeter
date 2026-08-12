@@ -20,8 +20,8 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Zero permission or consent prompts here — the first system prompt a user ever sees
- * is POST_NOTIFICATIONS, after they enable a reminder. Local is the dominant path;
- * sign-in is introduced later, only where email reminders need it.
+ * is POST_NOTIFICATIONS, after they enable a reminder. Everything is local; even email
+ * reminders are a mailto: hand-off to the user's own mail app — no sign-in exists anywhere.
  */
 @Composable
 fun OnboardingScreen(onContinueLocally: () -> Unit) {
@@ -40,7 +40,7 @@ fun OnboardingScreen(onContinueLocally: () -> Unit) {
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(20.dp))
-        Benefit("One glanceable place for your ChatGPT and Claude usage allowances.")
+        Benefit("One glanceable place for your ChatGPT, Claude, and Gemini usage allowances.")
         Benefit("Truthful reminders before resets — with the age of the data always visible.")
         Benefit("Local-first. Demeter never asks for your provider passwords and does not connect to consumer accounts automatically.")
         Spacer(Modifier.height(32.dp))
@@ -49,7 +49,7 @@ fun OnboardingScreen(onContinueLocally: () -> Unit) {
         }
         Spacer(Modifier.height(10.dp))
         Text(
-            "Sign in with Google is only needed for email reminders — you can add it later in Settings.",
+            "Email reminders are optional and use your own mail app — add an address later in Settings.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

@@ -78,9 +78,10 @@ private val DarkScheme: ColorScheme = darkColorScheme(
     inverseSurface = Color(0xFFEAE5D9),
     inverseOnSurface = Color(0xFF201F1A),
     inversePrimary = DemeterColors.HarvestDeep,
-    outline = Color(0xFF57544A),
+    outline = Color(0xFF8A8574), // 3.44:1 vs dark card #34332A, 4.99:1 vs SoilDark — >= 3:1 on every surface it borders
     outlineVariant = Color(0xFF3B382F),
-    error = DemeterColors.Urgent,
+    // Matches statusColors() dark urgent: 4.93:1 on cards, where #E4572E only reaches 3.45:1.
+    error = Color(0xFFFF7A50),
 )
 
 private val LightScheme: ColorScheme = lightColorScheme(
@@ -111,7 +112,7 @@ private val LightScheme: ColorScheme = lightColorScheme(
     inverseSurface = Color(0xFF35342E),
     inverseOnSurface = Color(0xFFF5F0E4),
     inversePrimary = DemeterColors.Harvest,
-    outline = Color(0xFFB3AD9E),
+    outline = Color(0xFF827D6D), // 3.82:1 vs Linen — text fields and chips keep a visible border
     outlineVariant = Color(0xFFD8D1BF),
     error = Color(0xFFB33A17),
 )

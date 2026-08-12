@@ -9,18 +9,22 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.Card
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,15 +36,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.demeter.app.platform.NotificationHelper
 import com.demeter.app.platform.TimeFormat
 import com.demeter.app.ui.DemeterViewModel
-import com.demeter.app.ui.theme.statusColors
 import com.demeter.domain.model.CapacityState
 import com.demeter.domain.model.DashboardPolicy
+import com.demeter.domain.model.FreshnessPolicy
 import com.demeter.domain.model.MonitoredAccount
 import com.demeter.domain.model.Provider
 import com.demeter.domain.model.UsageWindow
@@ -84,10 +91,13 @@ fun CompareScreen(
             )
         },
     ) { padding ->
+        // Content-sized panes in a scrollable column: nothing is ever clipped away,
+        // at any font scale, and panes carry no dead space at default sizes.
         Column(
             Modifier
                 .padding(padding)
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -103,7 +113,7 @@ fun CompareScreen(
                     now = now,
                     onOpenAccount = onOpenAccount,
                     onAddAccount = onAddAccount,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 220.dp),
                 )
             }
         }
@@ -129,7 +139,7 @@ private fun ComparePane(
     Card(modifier.fillMaxWidth()) {
         Column(
             Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .padding(14.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -150,7 +160,12 @@ private fun ComparePane(
                     )
                 }
                 // Hands off to the provider's own app/browser — no in-app web view.
-                FilledTonalButton(onClick = { openProvider(context, provider) }) {
+                // Outlined: a rare hand-off must not outshout the capacity data, and each
+                // button announces its provider so the three panes are distinguishable.
+                OutlinedButton(
+                    onClick = { openProvider(context, provider) },
+                    modifier = Modifier.semantics { contentDescription = "Open ${provider.displayLabel}" },
+                ) {
                     Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Open")
@@ -176,7 +191,9 @@ private fun ComparePane(
 
             if (account == null) {
                 Column(
-                    Modifier.fillMaxSize(),
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
@@ -207,6 +224,7 @@ private fun ComparePane(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val axis = DashboardPolicy.usageAxis(primary, now)
+                val badge = usageBadge(axis, primary, now)
                 val (value, unit) = primaryMetric(primary, now)
                 val percent = when (val cap = primary.capacity) {
                     is CapacityState.Known -> cap.remainingPercent
@@ -215,7 +233,7 @@ private fun ComparePane(
                 }
                 UsageRing(
                     percent = percent,
-                    color = usageBadge(axis, primary, now).color,
+                    color = badge.color,
                     centerTop = value,
                     centerBottom = unit,
                     diameter = 76.dp,
@@ -241,13 +259,30 @@ private fun ComparePane(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    // Same contract as the Today cards: status and evidence age are always
+                    // carried by icon + text, never by ring color alone.
+                    Spacer(Modifier.height(6.dp))
+                    Badge(badge)
+                    Spacer(Modifier.height(4.dp))
+                    Badge(
+                        evidenceBadge(
+                            FreshnessPolicy.evidenceAxis(primary.observedAt, primary.effectiveDuration, now),
+                            primary,
+                            now,
+                        ),
+                    )
                     Spacer(Modifier.height(6.dp))
                     val hasRule = rules.any { it.accountId == account.id && it.enabled }
+                    val blocked = hasRule && !NotificationHelper.canPost(context)
                     Text(
-                        if (hasRule) "Reminders on" else "Reminders off",
+                        when {
+                            blocked -> "Reminders blocked in Android Settings"
+                            hasRule -> "Reminders on"
+                            else -> "Reminders off"
+                        },
                         style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (hasRule) statusColors().healthy else MaterialTheme.colorScheme.error,
+                        fontWeight = if (blocked) FontWeight.SemiBold else null,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }

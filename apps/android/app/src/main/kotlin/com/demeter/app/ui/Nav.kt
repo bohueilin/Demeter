@@ -1,5 +1,10 @@
 package com.demeter.app.ui
 
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -19,9 +24,15 @@ import com.demeter.app.ui.screens.WindowEditorScreen
 
 @Composable
 fun DemeterNavHost(navController: NavHostController, viewModel: DemeterViewModel) {
+    // Quick fades instead of navigation-compose's 700ms default crossfade: this loop is
+    // traveled many times a day, so transitions stay under 300ms and never move numbers.
     NavHost(
         navController = navController,
         startDestination = if (viewModel.onboarded) "today" else "onboarding",
+        enterTransition = { fadeIn(tween(200, easing = LinearOutSlowInEasing)) },
+        exitTransition = { fadeOut(tween(125, easing = FastOutLinearInEasing)) },
+        popEnterTransition = { fadeIn(tween(200, easing = LinearOutSlowInEasing)) },
+        popExitTransition = { fadeOut(tween(125, easing = FastOutLinearInEasing)) },
     ) {
         composable("onboarding") {
             OnboardingScreen(
@@ -56,14 +67,18 @@ fun DemeterNavHost(navController: NavHostController, viewModel: DemeterViewModel
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() },
                 onCreated = { accountId ->
-                    navController.navigate("window/$accountId") {
+                    // Only the add flow that began on the Import screen carries the shared
+                    // screenshot's OCR text into the first Record-usage editor.
+                    val fromImport =
+                        navController.previousBackStackEntry?.destination?.route == "import"
+                    navController.navigate("window/$accountId?fromImport=$fromImport") {
                         popUpTo("today")
                     }
                 },
             )
         }
         composable(
-            route = "window/{accountId}?windowId={windowId}",
+            route = "window/{accountId}?windowId={windowId}&fromImport={fromImport}",
             arguments = listOf(
                 navArgument("accountId") { type = NavType.StringType },
                 navArgument("windowId") {
@@ -71,12 +86,17 @@ fun DemeterNavHost(navController: NavHostController, viewModel: DemeterViewModel
                     nullable = true
                     defaultValue = null
                 },
+                navArgument("fromImport") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                },
             ),
         ) { entry ->
             WindowEditorScreen(
                 viewModel = viewModel,
                 accountId = entry.arguments?.getString("accountId").orEmpty(),
                 windowId = entry.arguments?.getString("windowId"),
+                consumePendingImport = entry.arguments?.getBoolean("fromImport") ?: false,
                 onDone = { accountId ->
                     navController.popBackStack()
                     if (navController.currentBackStackEntry?.destination?.route == "today") {
@@ -135,7 +155,12 @@ fun DemeterNavHost(navController: NavHostController, viewModel: DemeterViewModel
                 viewModel = viewModel,
                 onSaved = { accountId -> navController.navigate("account/$accountId") },
                 onAddAccount = { navController.navigate("addAccount") },
-                onBack = { navController.popBackStack() },
+                onBack = {
+                    // Backing out abandons the import — drop the OCR text so it can never
+                    // prefill an unrelated editor later. (The add-account path keeps it.)
+                    viewModel.clearPendingImport()
+                    navController.popBackStack()
+                },
             )
         }
         composable("settings") {

@@ -22,12 +22,11 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Splitscreen
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -37,13 +36,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.demeter.app.R
+import com.demeter.app.platform.NotificationHelper
 import com.demeter.app.platform.TimeFormat
 import com.demeter.app.ui.DemeterViewModel
 import com.demeter.app.ui.theme.statusColors
@@ -81,29 +77,6 @@ fun TodayScreen(
     val windows by viewModel.repo.latestWindows().collectAsStateWithLifecycle(initialValue = emptyList())
     val rules by viewModel.repo.rules().collectAsStateWithLifecycle(initialValue = emptyList())
     val now by nowTicker()
-    var confirmDelete by remember { mutableStateOf<MonitoredAccount?>(null) }
-
-    confirmDelete?.let { target ->
-        AlertDialog(
-            onDismissRequest = { confirmDelete = null },
-            title = { Text("Delete ${target.nickname}?") },
-            text = {
-                Text(
-                    "This removes the account, its usage history, and reminders from this device. " +
-                        "It does not touch your ${target.provider.displayLabel} account.",
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteAccount(target.id)
-                    confirmDelete = null
-                }) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDelete = null }) { Text("Cancel") }
-            },
-        )
-    }
 
     Scaffold(
         topBar = {
@@ -112,8 +85,7 @@ fun TodayScreen(
                     Column {
                         Text(
                             todayLine(now),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleLarge,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -158,7 +130,8 @@ fun TodayScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
-                contentPadding = PaddingValues(16.dp),
+                // Extra bottom clearance so the extended FAB never occludes the last card.
+                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 88.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -169,6 +142,7 @@ fun TodayScreen(
                             account = accounts.firstOrNull { it.id == suggestion.accountId },
                             now = now,
                             onOpen = { onOpenAccount(suggestion.accountId) },
+                            modifier = Modifier.animateItem(),
                         )
                     }
                 }
@@ -181,7 +155,8 @@ fun TodayScreen(
                         now = now,
                         onOpen = { onOpenAccount(account.id) },
                         onUpdateUsage = onUpdateUsage,
-                        onDelete = { confirmDelete = account },
+                        // Positions animate; the numbers themselves never do.
+                        modifier = Modifier.animateItem(),
                     )
                 }
             }
@@ -211,22 +186,15 @@ private fun secondaryLine(windows: List<UsageWindow>, primary: UsageWindow): Str
 }
 
 /**
- * e.g. "Today - Saturday, July 18th 2026". Derived from the shared ticker, so it rolls
- * over on its own at midnight without needing a separate clock.
+ * e.g. "Today · Saturday, July 18". Derived from the shared ticker, so it rolls
+ * over on its own at midnight without needing a separate clock. The middot matches
+ * the app's metadata-separator convention; year and ordinal add nothing to "now".
  */
 private fun todayLine(now: Instant, zone: ZoneId = ZoneId.systemDefault()): String {
     val date = now.atZone(zone).toLocalDate()
     val dayOfWeek = date.format(DateTimeFormatter.ofPattern("EEEE"))
     val month = date.format(DateTimeFormatter.ofPattern("MMMM"))
-    return "Today - $dayOfWeek, $month ${date.dayOfMonth}${ordinalSuffix(date.dayOfMonth)} ${date.year}"
-}
-
-private fun ordinalSuffix(day: Int): String = when {
-    day in 11..13 -> "th" // 11th, 12th, 13th are exceptions to the 1st/2nd/3rd rule
-    day % 10 == 1 -> "st"
-    day % 10 == 2 -> "nd"
-    day % 10 == 3 -> "rd"
-    else -> "th"
+    return "Today · $dayOfWeek, $month ${date.dayOfMonth}"
 }
 
 private fun summaryLine(accounts: List<MonitoredAccount>, windows: List<UsageWindow>, now: Instant): String {
@@ -245,9 +213,11 @@ private fun SuggestedNextBanner(
     account: MonitoredAccount?,
     now: Instant,
     onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Card(
         onClick = onOpen,
+        modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
         Column(Modifier.padding(14.dp)) {
@@ -261,6 +231,8 @@ private fun SuggestedNextBanner(
                     append(suggestion.label)
                     if (remaining != null) append(" — $remaining% left")
                     suggestion.resetAt?.let { append(", resets ${TimeFormat.untilPhrase(it, now)}") }
+                    // A prescriptive claim always carries the age of the evidence behind it.
+                    append(" · updated ${TimeFormat.agoPhrase(suggestion.observedAt, now)}")
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -303,13 +275,13 @@ private fun AccountCard(
     now: Instant,
     onOpen: () -> Unit,
     onUpdateUsage: (accountId: String, windowId: String) -> Unit,
-    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     // Lead with the weekly budget rather than the churning 5-hour session (see headlineWindow).
     val primary = headlineWindow(windows)
     val context = LocalContext.current
 
-    Card(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
+    Card(onClick = onOpen, modifier = modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // Provider logo so ChatGPT vs Claude accounts are recognizable at a glance.
@@ -331,16 +303,10 @@ private fun AccountCard(
                 }
                 if (primary != null) {
                     // Updating usage is the main repeat action; keep it reachable without opening details.
+                    // Deletion is rare and destructive — it lives on the detail screen, not every card.
                     IconButton(onClick = { onUpdateUsage(account.id, primary.id) }) {
                         Icon(Icons.Filled.Edit, contentDescription = "Update usage for ${account.nickname}")
                     }
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        Icons.Filled.Delete,
-                        contentDescription = "Delete ${account.nickname}",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
 
@@ -413,12 +379,26 @@ private fun AccountCard(
                         )
                     }
                     val hasRule = rules.any { it.accountId == account.id && it.enabled }
+                    // "Off" is a deliberate user choice, not an error — it stays quiet metadata.
+                    // Only a rule the OS will actually suppress earns an attention signal.
+                    val blocked = hasRule && !NotificationHelper.canPost(context)
+                    if (blocked) {
+                        Icon(
+                            Icons.Filled.NotificationsOff,
+                            contentDescription = null,
+                            tint = statusColors().urgent,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
                     Text(
-                        if (hasRule) "· Reminders on" else "· Reminders off",
+                        when {
+                            blocked -> "· Reminders blocked in Android Settings"
+                            hasRule -> "· Reminders on"
+                            else -> "· Reminders off"
+                        },
                         style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        // Green when armed; red when off, as a nudge to set one up.
-                        color = if (hasRule) statusColors().healthy else MaterialTheme.colorScheme.error,
+                        fontWeight = if (blocked) FontWeight.SemiBold else null,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }

@@ -166,6 +166,9 @@ class DemeterViewModel(app: Application) : AndroidViewModel(app) {
     /** Text recognized from a shared screenshot, awaiting the Import screen. */
     val pendingImport = androidx.compose.runtime.mutableStateOf<String?>(null)
 
+    /** Monotonic token: a newer share or an explicit clear invalidates any in-flight OCR write. */
+    private var importGeneration = 0L
+
     /** Windows detected from a screenshot, staged for the multi-window import preview. */
     var pendingWindows: List<com.demeter.app.data.UsageScreenParser.ParsedWindow> = emptyList()
         private set
@@ -244,18 +247,22 @@ class DemeterViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Share-sheet entry: OCR a shared screenshot, then hand off to the Import screen. */
     fun ingestSharedImage(uri: android.net.Uri, onReady: () -> Unit) {
+        val generation = ++importGeneration
         viewModelScope.launch {
             val text = runCatching {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                     com.demeter.app.platform.OcrReader.readText(getApplication(), uri)
                 }
             }.getOrNull().orEmpty()
-            pendingImport.value = text
+            // Drop the result if a newer share (or a clear) superseded this read —
+            // otherwise a slow OCR could attach screenshot A's numbers to share B.
+            if (generation == importGeneration) pendingImport.value = text
             onReady()
         }
     }
 
     fun clearPendingImport() {
+        importGeneration++
         pendingImport.value = null
     }
 
@@ -319,13 +326,15 @@ class DemeterViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Deletes everything: cancels all platform alarms, clears every table. */
+    /** Deletes everything: cancels all platform alarms, clears every table, and forgets the reminder email. */
     fun deleteAllData(onDone: () -> Unit = {}) {
         viewModelScope.launch {
             repo.reminderDao.activeScheduled().forEach { container.alarmScheduler.cancel(it.requestCode) }
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 container.db.clearAllTables()
             }
+            // "Delete all data" must mean all of it — the saved email address is personal data too.
+            prefs.edit().remove(EmailComposer.PREF_EMAIL).apply()
             repo.logEvent(null, null, "deleted_all", "All local data was deleted at the user's request.")
             onDone()
         }

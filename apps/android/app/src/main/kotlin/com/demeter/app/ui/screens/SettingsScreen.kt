@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -32,6 +33,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -67,7 +71,7 @@ fun SettingsScreen(viewModel: DemeterViewModel, onBack: () -> Unit) {
                 .padding(20.dp)
                 .verticalScroll(rememberScrollState()),
         ) {
-            Text("Reminder health", style = MaterialTheme.typography.titleSmall)
+            Text("Reminder health", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.weight(1f)) {
@@ -100,13 +104,13 @@ fun SettingsScreen(viewModel: DemeterViewModel, onBack: () -> Unit) {
             Spacer(Modifier.height(20.dp))
             HorizontalDivider()
             Spacer(Modifier.height(20.dp))
-            Text("Email reminders", style = MaterialTheme.typography.titleSmall)
+            Text("Email reminders", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(8.dp))
             Text(
                 "Reminders can hand a pre-filled email to your mail app — you tap Send. Demeter never " +
                     "sends mail itself and never signs in to your account, which is why it still needs no " +
                     "network permission.",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(10.dp))
@@ -135,7 +139,7 @@ fun SettingsScreen(viewModel: DemeterViewModel, onBack: () -> Unit) {
                 Spacer(Modifier.height(6.dp))
                 Text(
                     "Reminder notifications now show an \"Email\" button that opens a draft to this address.",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -143,33 +147,44 @@ fun SettingsScreen(viewModel: DemeterViewModel, onBack: () -> Unit) {
             Spacer(Modifier.height(20.dp))
             HorizontalDivider()
             Spacer(Modifier.height(20.dp))
-            Text("Privacy", style = MaterialTheme.typography.titleSmall)
+            Text("Privacy", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            // The whole row toggles and carries the label, so TalkBack announces
+            // "Privacy mode, switch, off" instead of an anonymous "off, switch".
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = viewModel.privacySecure.value,
+                        role = Role.Switch,
+                        onValueChange = { viewModel.setPrivacySecure(it) },
+                    ),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
                 Column(Modifier.weight(1f)) {
                     Text("Privacy mode", style = MaterialTheme.typography.bodyMedium)
                     Text(
                         "Hides Demeter's content in the app switcher and blocks screenshots of the app. Your own screenshots of other apps are unaffected.",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 androidx.compose.material3.Switch(
                     checked = viewModel.privacySecure.value,
-                    onCheckedChange = { viewModel.setPrivacySecure(it) },
+                    onCheckedChange = null,
                 )
             }
             Spacer(Modifier.height(6.dp))
             Text(
                 "Everything stays on this device. Demeter has no network permission, no analytics, and never asks for provider passwords or API keys. Reminders hide details on the lock screen until you unlock.",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             Spacer(Modifier.height(20.dp))
             HorizontalDivider()
             Spacer(Modifier.height(20.dp))
-            Text("Your data", style = MaterialTheme.typography.titleSmall)
+            Text("Your data", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(8.dp))
             var confirmDelete by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
             Row {
@@ -191,11 +206,13 @@ fun SettingsScreen(viewModel: DemeterViewModel, onBack: () -> Unit) {
                 androidx.compose.material3.AlertDialog(
                     onDismissRequest = { confirmDelete = false },
                     title = { Text("Delete all data?") },
-                    text = { Text("Every account, usage window, reminder, and activity record on this device will be permanently deleted. This cannot be undone.") },
+                    text = { Text("Every account, usage window, reminder, and activity record on this device will be permanently deleted, along with your saved reminder email address. This cannot be undone.") },
                     confirmButton = {
                         TextButton(onClick = {
                             confirmDelete = false
                             viewModel.deleteAllData()
+                            // The field mirrors the pref; show the deletion immediately.
+                            email = ""
                         }) { Text("Delete everything", color = MaterialTheme.colorScheme.error) }
                     },
                     dismissButton = {
@@ -207,14 +224,14 @@ fun SettingsScreen(viewModel: DemeterViewModel, onBack: () -> Unit) {
             Spacer(Modifier.height(20.dp))
             HorizontalDivider()
             Spacer(Modifier.height(20.dp))
-            Text("Demo", style = MaterialTheme.typography.titleSmall)
+            Text("Demo", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(8.dp))
             FilledTonalButton(onClick = { viewModel.seedSamples() }) { Text("Add sample accounts") }
 
             Spacer(Modifier.height(20.dp))
             HorizontalDivider()
             Spacer(Modifier.height(20.dp))
-            Text("About", style = MaterialTheme.typography.titleSmall)
+            Text("About", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(8.dp))
             Text(
                 "Demeter — AI Usage Monitor v${com.demeter.app.BuildConfig.VERSION_NAME}. Local-first: your data stays on this device. " +
@@ -227,7 +244,7 @@ fun SettingsScreen(viewModel: DemeterViewModel, onBack: () -> Unit) {
             Spacer(Modifier.height(20.dp))
             HorizontalDivider()
             Spacer(Modifier.height(20.dp))
-            Text("Recent activity (all accounts)", style = MaterialTheme.typography.titleSmall)
+            Text("Recent activity (all accounts)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(8.dp))
             events.take(20).forEach { event ->
                 Column(Modifier.padding(vertical = 4.dp)) {
