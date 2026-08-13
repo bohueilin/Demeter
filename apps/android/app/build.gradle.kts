@@ -20,8 +20,8 @@ android {
         applicationId = "com.demeter.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 21
-        versionName = "1.7.1"
+        versionCode = 22
+        versionName = "1.8.0"
     }
 
     signingConfigs {

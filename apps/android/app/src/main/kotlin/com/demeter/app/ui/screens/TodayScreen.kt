@@ -1,12 +1,21 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+)
 
 package com.demeter.app.ui.screens
 
+import android.Manifest
+import android.content.Intent
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,11 +32,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Splitscreen
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalButton
@@ -36,18 +48,25 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.demeter.app.R
 import com.demeter.app.platform.NotificationHelper
@@ -72,11 +91,29 @@ fun TodayScreen(
     onOpenSettings: () -> Unit,
     onUpdateUsage: (accountId: String, windowId: String) -> Unit,
     onOpenCompare: () -> Unit = {},
+    onEditReminder: (accountId: String, windowId: String) -> Unit = { _, _ -> },
 ) {
     val accounts by viewModel.repo.accounts().collectAsStateWithLifecycle(initialValue = emptyList())
     val windows by viewModel.repo.latestWindows().collectAsStateWithLifecycle(initialValue = emptyList())
     val rules by viewModel.repo.rules().collectAsStateWithLifecycle(initialValue = emptyList())
     val now by nowTicker()
+
+    // Quick reminder picker target: an account plus its headline window.
+    var quickReminders by remember { mutableStateOf<Pair<MonitoredAccount, UsageWindow>?>(null) }
+
+    quickReminders?.let { (account, window) ->
+        QuickReminderSheet(
+            account = account,
+            window = window,
+            rules = rules,
+            viewModel = viewModel,
+            onAllOptions = {
+                quickReminders = null
+                onEditReminder(account.id, window.id)
+            },
+            onDismiss = { quickReminders = null },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -155,6 +192,7 @@ fun TodayScreen(
                         now = now,
                         onOpen = { onOpenAccount(account.id) },
                         onUpdateUsage = onUpdateUsage,
+                        onQuickReminders = { window -> quickReminders = account to window },
                         // Positions animate; the numbers themselves never do.
                         modifier = Modifier.animateItem(),
                     )
@@ -195,6 +233,121 @@ private fun todayLine(now: Instant, zone: ZoneId = ZoneId.systemDefault()): Stri
     val dayOfWeek = date.format(DateTimeFormatter.ofPattern("EEEE"))
     val month = date.format(DateTimeFormatter.ofPattern("MMMM"))
     return "Today · $dayOfWeek, $month ${date.dayOfMonth}"
+}
+
+/** The three most common lead times, quick-armable straight from a card's bell. */
+private val QUICK_LEAD_MINUTES = listOf(3 * 24 * 60, 2 * 24 * 60, 24 * 60)
+
+/**
+ * Bottom-sheet quick picker: multi-select 3d/2d/1d reminders for the card's headline
+ * window, applied on tap through the same rule model as the full editor. Only lead
+ * membership and enablement change here — evidence policy, threshold, quiet hours,
+ * and any other configured leads are preserved (and disclosed in "Also active").
+ * A disabled rule renders unselected; arming a chip re-enables it with its old leads.
+ */
+@Composable
+private fun QuickReminderSheet(
+    account: MonitoredAccount,
+    window: UsageWindow,
+    rules: List<ReminderRule>,
+    viewModel: DemeterViewModel,
+    onAllOptions: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val rule = rules.firstOrNull { it.windowId == window.id }
+    var canPost by remember { mutableStateOf(NotificationHelper.canPost(context)) }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        canPost = granted
+        viewModel.logPermissionResult(granted)
+    }
+    // Re-check on every resume, so returning from "Fix in Settings" heals the warning.
+    LifecycleResumeEffect(Unit) {
+        canPost = NotificationHelper.canPost(context)
+        onPauseOrDispose { }
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+        ) {
+            Text(
+                "Reminders · ${window.label}",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.semantics { heading() },
+            )
+            Text(
+                account.nickname,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            // FlowRow: the chips wrap instead of clipping at large font scales.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                QUICK_LEAD_MINUTES.forEach { lead ->
+                    val selected = rule != null && rule.enabled && lead in rule.leadMinutes
+                    FilterChip(
+                        selected = selected,
+                        onClick = {
+                            // Read-modify-write happens in the ViewModel behind a mutex,
+                            // so rapid multi-select taps never drop each other's updates.
+                            viewModel.toggleQuickLead(account.id, window.id, lead)
+                            if (!selected && !canPost && Build.VERSION.SDK_INT >= 33) {
+                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        },
+                        label = { Text("${TimeFormat.leadPhrase(lead)} before") },
+                    )
+                }
+            }
+            // Disclose every lead this sheet is editing around — including leads a
+            // disabled rule remembers, since arming a chip restores them.
+            val otherLeads = rule?.leadMinutes?.filter { it !in QUICK_LEAD_MINUTES }.orEmpty()
+            if (otherLeads.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                val phrase = otherLeads.joinToString(", ") { TimeFormat.leadPhrase(it) }
+                Text(
+                    if (rule?.enabled == true) {
+                        "Also active: $phrase before reset"
+                    } else {
+                        "Arming also restores: $phrase before reset"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Planning reminders, not alarms — Android may deliver a little late.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (!canPost && rule?.enabled == true) {
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Notifications are off in Android Settings — reminders can't appear.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = {
+                        context.startActivity(
+                            Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName),
+                        )
+                    }) { Text("Fix in Settings") }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            TextButton(onClick = onAllOptions) { Text("All options") }
+        }
+    }
 }
 
 private fun summaryLine(accounts: List<MonitoredAccount>, windows: List<UsageWindow>, now: Instant): String {
@@ -275,6 +428,7 @@ private fun AccountCard(
     now: Instant,
     onOpen: () -> Unit,
     onUpdateUsage: (accountId: String, windowId: String) -> Unit,
+    onQuickReminders: (UsageWindow) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Lead with the weekly budget rather than the churning 5-hour session (see headlineWindow).
@@ -291,6 +445,7 @@ private fun AccountCard(
                     account.nickname,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 // Hands off to the provider's own app/browser — no embedded web view.
@@ -306,6 +461,21 @@ private fun AccountCard(
                     // Deletion is rare and destructive — it lives on the detail screen, not every card.
                     IconButton(onClick = { onUpdateUsage(account.id, primary.id) }) {
                         Icon(Icons.Filled.Edit, contentDescription = "Update usage for ${account.nickname}")
+                    }
+                    // Quick reminder picker: arm 3d/2d/1d for the headline window
+                    // without the full editor. Green only when armed AND deliverable —
+                    // a blocked rule stays neutral (the meta row carries the warning).
+                    val armed = rules.any { it.windowId == primary.id && it.enabled }
+                    IconButton(onClick = { onQuickReminders(primary) }) {
+                        Icon(
+                            Icons.Filled.Notifications,
+                            contentDescription = "Reminders for ${account.nickname}",
+                            tint = if (armed && NotificationHelper.canPost(context)) {
+                                statusColors().healthy
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
                     }
                 }
             }

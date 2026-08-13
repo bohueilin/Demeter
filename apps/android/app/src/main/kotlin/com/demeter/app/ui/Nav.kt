@@ -52,6 +52,9 @@ fun DemeterNavHost(navController: NavHostController, viewModel: DemeterViewModel
                     navController.navigate("window/$accountId?windowId=$windowId")
                 },
                 onOpenCompare = { navController.navigate("compare") },
+                onEditReminder = { accountId, windowId ->
+                    navController.navigate("reminder/$accountId/$windowId")
+                },
             )
         }
         composable("compare") {

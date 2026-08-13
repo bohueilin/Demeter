@@ -12,9 +12,12 @@ import com.demeter.domain.model.CapacityState
 import com.demeter.domain.model.Provider
 import com.demeter.domain.model.SourceType
 import com.demeter.domain.model.WindowKind
+import com.demeter.domain.reminder.EvidencePolicy
 import com.demeter.domain.reminder.ReminderRule
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Duration
 import java.time.Instant
 
@@ -132,6 +135,45 @@ class DemeterViewModel(app: Application) : AndroidViewModel(app) {
             repo.saveRule(rule)
             container.reconciler.reconcile("rule_change")
             onDone()
+        }
+    }
+
+    private val quickLeadMutex = Mutex()
+
+    /**
+     * Toggles one quick-pick lead (3d/2d/1d) on a window's rule. Read-modify-write is
+     * serialized behind a mutex and always reads the CURRENT persisted rule, so rapid
+     * multi-select taps in the quick sheet can never drop each other's updates. Only
+     * lead membership and enablement change; every other setting is preserved. A rule
+     * is created with the editor's defaults when none exists.
+     */
+    fun toggleQuickLead(accountId: String, windowId: String, leadMinutes: Int) {
+        viewModelScope.launch {
+            quickLeadMutex.withLock {
+                val base = repo.ruleForWindow(windowId) ?: ReminderRule(
+                    id = java.util.UUID.randomUUID().toString(),
+                    accountId = accountId,
+                    windowId = windowId,
+                    leadMinutes = emptyList(),
+                    evidencePolicy = EvidencePolicy.LAST_KNOWN,
+                    remindWhenUnknown = false,
+                    minRemainingPercent = 10,
+                    quietStartMinuteOfDay = null,
+                    quietEndMinuteOfDay = null,
+                    enabled = true,
+                )
+                val armed = base.enabled && leadMinutes in base.leadMinutes
+                val newLeads =
+                    if (armed) base.leadMinutes.toSet() - leadMinutes
+                    else base.leadMinutes.toSet() + leadMinutes
+                repo.saveRule(
+                    base.copy(
+                        leadMinutes = newLeads.sortedDescending(),
+                        enabled = newLeads.isNotEmpty(),
+                    ),
+                )
+                container.reconciler.reconcile("rule_change")
+            }
         }
     }
 

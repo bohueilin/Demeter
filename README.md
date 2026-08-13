@@ -61,7 +61,9 @@ Demeter (the app) helps you harvest what you're already paying for:
   windows. You can also paste the text or enter values by hand.
 - **🔔 Truthful reminders.** Best-effort local reminders before each reset, with lead times from
   **7 days down to 1 hour**. A reminder based on stale data says so ("you had 60% left as of 2d
-  ago") instead of pretending it's live. Nothing is ever a false alarm.
+  ago") instead of pretending it's live. Nothing is ever a false alarm. The common leads —
+  **3d / 2d / 1d before** — arm straight from a card's bell, multi-select, no setup
+  screen needed.
 - **⧉ Compare view.** A stacked two-pane dashboard — Claude on top, ChatGPT below — each with its
   ring, reset and reminder state. Native panes, deliberately **not** embedded web views (see below).
 - **↗ One-tap hand-off.** Jump straight into the official ChatGPT or Claude app (or your browser)
