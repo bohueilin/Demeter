@@ -49,25 +49,22 @@ object SampleData {
             )
         }
 
-        // 1 — urgent: plenty remaining, resets soon, fresh manual data
+        // One sample account per provider. Between them the three still showcase every
+        // card state: fresh manual data, stale pasted evidence, an exhausted session,
+        // an unknown-remaining window (reset countdown only), and screenshot evidence.
+
+        // 1 — ChatGPT: fresh session, but the weekly value was pasted 2 days ago (stale)
         val personalGpt = account(Provider.OPENAI, "Personal (sample)")
         evidence(personalGpt, "5-hour session", WindowKind.SESSION, "KNOWN", 72, Duration.ofHours(2), Duration.ofMinutes(12), SourceType.MANUAL)
-        evidence(personalGpt, "Weekly · all models", WindowKind.WEEKLY, "KNOWN", 45, Duration.ofDays(3), Duration.ofHours(4), SourceType.MANUAL)
+        evidence(personalGpt, "Weekly · all models", WindowKind.WEEKLY, "KNOWN", 45, Duration.ofDays(3), Duration.ofDays(2), SourceType.PASTE)
 
-        // 2 — stale evidence: value present but old (check-usage territory)
-        val workGpt = account(Provider.OPENAI, "Work (sample)")
-        evidence(workGpt, "Weekly · all models", WindowKind.WEEKLY, "KNOWN", 60, Duration.ofHours(30), Duration.ofDays(2), SourceType.PASTE)
-
-        // 3 — exhausted session + healthy weekly
-        val claudePersonal = account(Provider.ANTHROPIC, "Claude personal (sample)")
+        // 2 — Claude: exhausted session + healthy weekly + unknown-remaining Opus window
+        val claudePersonal = account(Provider.ANTHROPIC, "Claude (sample)")
         evidence(claudePersonal, "Session", WindowKind.SESSION, "EXHAUSTED", null, Duration.ofHours(3), Duration.ofMinutes(25), SourceType.MANUAL)
         evidence(claudePersonal, "Weekly limit", WindowKind.WEEKLY, "KNOWN", 81, Duration.ofDays(5), Duration.ofMinutes(25), SourceType.MANUAL)
+        evidence(claudePersonal, "Weekly · Opus", WindowKind.WEEKLY, "UNKNOWN", null, Duration.ofDays(1).plusHours(6), Duration.ofHours(1), SourceType.MANUAL)
 
-        // 4 — unknown remaining: reset time only
-        val claudeMax = account(Provider.ANTHROPIC, "Claude Max (sample)")
-        evidence(claudeMax, "Weekly · Opus", WindowKind.WEEKLY, "UNKNOWN", null, Duration.ofDays(1).plusHours(6), Duration.ofHours(1), SourceType.MANUAL)
-
-        // 5 — Gemini: daily "current usage" + weekly limit, both mostly available
+        // 3 — Gemini: daily "current usage" + weekly limit, both from a screenshot
         val geminiPersonal = account(Provider.GOOGLE, "Gemini (sample)")
         evidence(geminiPersonal, "Current usage", WindowKind.SESSION, "KNOWN", 89, Duration.ofHours(5), Duration.ofMinutes(3), SourceType.SCREENSHOT)
         evidence(geminiPersonal, "Weekly limit", WindowKind.WEEKLY, "KNOWN", 91, Duration.ofDays(6), Duration.ofMinutes(3), SourceType.SCREENSHOT)

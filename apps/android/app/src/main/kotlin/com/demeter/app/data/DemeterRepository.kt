@@ -132,6 +132,19 @@ class DemeterRepository(private val db: DemeterDb) {
             ),
         )
         logEvent(accountId, id, "evidence_recorded", "Usage updated from ${source.displayLabel.lowercase()}.")
+        // Recording your own evidence adopts a sample account: "(sample)" marks
+        // fabricated seed data, and from this update on the account holds yours —
+        // so "Personal (sample)" becomes just "Personal".
+        db.accountDao().account(accountId)?.let { acct ->
+            if (acct.nickname.endsWith(" (sample)")) {
+                val adopted = acct.nickname.removeSuffix(" (sample)")
+                db.accountDao().upsert(acct.copy(nickname = adopted))
+                logEvent(
+                    accountId, null, "sample_adopted",
+                    "Renamed to \"$adopted\" — this account now holds your own evidence.",
+                )
+            }
+        }
         return id
     }
 
